@@ -1,0 +1,241 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - email: string (required) - The user's email address
+    //   - role: string (required, 'admin' or 'user') - The user's role
+    //   - createdAt: timestamp (required) - When the user was created
+    //
+    // Collection: blogs
+    // Document ID: {blogId}
+    // Fields:
+    //   - title: string (required) - The title of the blog post
+    //   - slug: string (required) - The URL-friendly slug for the blog post
+    //   - content: string (required) - The markdown content of the blog post
+    //   - excerpt: string (optional) - A short summary of the blog post
+    //   - keywords: string (optional) - Comma-separated SEO keywords
+    //   - category: string (optional) - The category of the blog post
+    //   - status: string (required, 'draft' or 'published') - The publication status
+    //   - authorUid: string (required) - The UID of the user who created the post
+    //   - createdAt: timestamp (required) - When the post was created
+    //   - updatedAt: timestamp (required) - When the post was last updated
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserEmail() {
+      return (request.auth != null && request.auth.token != null && 'email' in request.auth.token && request.auth.token.email is string) ? request.auth.token.email.lower() : 'none';
+    }
+
+    function isSuperAdmin() {
+      return request.auth != null && (
+        request.auth.uid == "ORXIdYOvCofhAlqKDO2fyPdi5Ks1" ||
+        getUserEmail() == "devabdultechnologies@gmail.com" ||
+        getUserEmail() == "aalqutijifawy@gmail.com" ||
+        getUserEmail() == "eduverseai76@gmail.com"
+      );
+    }
+
+    function isAdmin() {
+      return isSuperAdmin() || (
+        request.auth != null && (
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') in ['admin', 'editor']) ||
+          (getUserEmail() != 'none' && exists(/databases/$(database)/documents/team_members/$(getUserEmail())) && get(/databases/$(database)/documents/team_members/$(getUserEmail())).data.get('role', 'user') in ['admin', 'editor'])
+        )
+      );
+    }
+
+    function hasOnlyAllowedFields(allowedFields) {
+      return request.resource.data.keys().hasOnly(allowedFields);
+    }
+
+    function hasRequiredFields(requiredFields) {
+      return request.resource.data.keys().hasAll(requiredFields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is string &&
+              request.resource.data[field].size() >= minLen &&
+              request.resource.data[field].size() <= maxLen);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser() {
+      return hasOnlyAllowedFields(['email', 'role', 'createdAt', 'status']) &&
+             hasRequiredFields(['email', 'role', 'createdAt']) &&
+             isValidEmail(request.resource.data.email) &&
+             request.resource.data.role in ['admin', 'editor', 'user'] &&
+             (!('status' in request.resource.data) || request.resource.data.status in ['active', 'inactive']) &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidBlog() {
+      return hasOnlyAllowedFields(['title', 'slug', 'content', 'excerpt', 'image', 'status', 'tags', 'keywords', 'category', 'type', 'authorUid', 'authorName', 'createdAt', 'updatedAt', 'publishedAt', 'allowComments', 'pdfUrl', 'challenge', 'solution', 'results', 'metrics', 'features', 'tech', 'websiteUrl']) &&
+             hasRequiredFields(['title', 'content', 'status', 'authorUid', 'createdAt', 'updatedAt']) &&
+             request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() < 255 &&
+             request.resource.data.content is string && request.resource.data.content.size() > 0 && request.resource.data.content.size() < 500000 &&
+             isValidOptionalString('slug', 0, 255) &&
+             isValidOptionalString('excerpt', 0, 1000) &&
+             isValidOptionalString('image', 0, 500000) &&
+             isValidOptionalString('keywords', 0, 1000) &&
+             isValidOptionalString('category', 0, 255) &&
+             isValidOptionalString('type', 0, 50) &&
+             isValidOptionalString('pdfUrl', 0, 1000) &&
+             isValidOptionalString('websiteUrl', 0, 1000) &&
+             request.resource.data.status in ['draft', 'published', 'scheduled'] &&
+             request.resource.data.authorUid is string && request.resource.data.authorUid.size() > 0 && request.resource.data.authorUid.size() < 128 &&
+             isValidOptionalString('authorName', 0, 128) &&
+             (!('tags' in request.resource.data) || (request.resource.data.tags is list && request.resource.data.tags.size() <= 20)) &&
+             (!('metrics' in request.resource.data) || (request.resource.data.metrics is list && request.resource.data.metrics.size() <= 10)) &&
+             (!('features' in request.resource.data) || (request.resource.data.features is list && request.resource.data.features.size() <= 20)) &&
+             (!('tech' in request.resource.data) || (request.resource.data.tech is list && request.resource.data.tech.size() <= 20)) &&
+             request.resource.data.createdAt is timestamp &&
+             request.resource.data.updatedAt is timestamp &&
+             (!('publishedAt' in request.resource.data) || request.resource.data.publishedAt is timestamp) &&
+             (!('allowComments' in request.resource.data) || request.resource.data.allowComments is bool);
+    }
+
+    function isValidComment() {
+      let isAnonymous = !isAuthenticated() && request.resource.data.authorId == 'anonymous';
+      let isAuthUser = isAuthenticated() && request.resource.data.authorId == request.auth.uid;
+      
+      return hasOnlyAllowedFields(['text', 'authorName', 'createdAt', 'authorId']) &&
+             hasRequiredFields(['text', 'authorName', 'createdAt', 'authorId']) &&
+             request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() < 2000 &&
+             request.resource.data.authorName is string && request.resource.data.authorName.size() > 0 && request.resource.data.authorName.size() < 100 &&
+             request.resource.data.authorId is string && request.resource.data.authorId.size() > 0 && request.resource.data.authorId.size() < 128 &&
+             (isAnonymous || isAuthUser) &&
+             request.resource.data.createdAt is timestamp;
+    }
+
+    function isValidProjectInquiry() {
+      return request.resource.data.keys().hasAll(['name', 'email', 'message', 'status', 'createdAt']) &&
+             request.resource.data.name is string &&
+             request.resource.data.email is string &&
+             request.resource.data.message is string &&
+             request.resource.data.status in ['new', 'read', 'archived'] &&
+             request.resource.data.createdAt != null;
+    }
+
+    function isValidNotification() {
+      return hasOnlyAllowedFields(['title', 'message', 'read', 'createdAt', 'userId']) &&
+             hasRequiredFields(['title', 'message', 'read', 'createdAt']) &&
+             request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() < 255 &&
+             request.resource.data.message is string && request.resource.data.message.size() > 0 && request.resource.data.message.size() < 1000 &&
+             request.resource.data.read is bool &&
+             request.resource.data.createdAt is timestamp &&
+             (!('userId' in request.resource.data) || request.resource.data.userId is string);
+    }
+
+    function isValidNewsletterSubscriber() {
+      return request.resource.data.keys().hasAll(['email', 'createdAt']) &&
+             request.resource.data.email is string &&
+             request.resource.data.createdAt != null;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /notifications/{notificationId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && isValidNotification();
+      allow update: if isAdmin() && isValidNotification() && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAdmin();
+    }
+
+    match /team_members/{memberEmail} {
+      allow get: if true;
+      allow list: if isAdmin() || (isAuthenticated() && 'email' in request.auth.token && request.auth.token.email is string && request.auth.token.email.lower() == memberEmail);
+      allow create, update, delete: if isSuperAdmin();
+    }
+    
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && 
+                       isOwner(userId) && 
+                       isValidUser() && 
+                       (
+                         request.resource.data.role == 'user' || 
+                         isSuperAdmin() ||
+                         (exists(/databases/$(database)/documents/team_members/$(getUserEmail())) && 
+                          request.resource.data.role == get(/databases/$(database)/documents/team_members/$(getUserEmail())).data.role)
+                       );
+      allow update: if isAuthenticated() && 
+                       isValidUser() && 
+                       (
+                         isSuperAdmin() ||
+                         (isOwner(userId) && request.resource.data.role == resource.data.role) ||
+                         (isOwner(userId) && exists(/databases/$(database)/documents/team_members/$(getUserEmail())) && request.resource.data.role == get(/databases/$(database)/documents/team_members/$(getUserEmail())).data.role) ||
+                         (isOwner(userId) && !exists(/databases/$(database)/documents/team_members/$(getUserEmail())) && request.resource.data.role == 'user')
+                       ) &&
+                       request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isSuperAdmin();
+    }
+
+    match /project_inquiries/{inquiryId} {
+      allow read: if isAdmin();
+      allow create: if isValidProjectInquiry() && request.resource.data.status == 'new';
+      allow update: if isAdmin() && isValidProjectInquiry() && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAdmin();
+    }
+
+    match /newsletter_subscribers/{subscriberId} {
+      allow read: if isAdmin();
+      allow create: if isValidNewsletterSubscriber();
+      allow update: if isAdmin() && isValidNewsletterSubscriber() && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /blogs/{blogId} {
+      allow read: if resource.data.status in ['published', 'scheduled'] || isAdmin();
+      allow create: if isAdmin() && isValidBlog() && request.resource.data.authorUid == request.auth.uid;
+      allow update: if isAdmin() && isValidBlog() && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAdmin();
+      
+      match /comments/{commentId} {
+        allow read: if (exists(/databases/$(database)/documents/blogs/$(blogId)) && get(/databases/$(database)/documents/blogs/$(blogId)).data.status in ['published', 'scheduled']) || isAdmin();
+        allow create: if isValidComment() && exists(/databases/$(database)/documents/blogs/$(blogId)) && (!('allowComments' in get(/databases/$(database)/documents/blogs/$(blogId)).data) || get(/databases/$(database)/documents/blogs/$(blogId)).data.allowComments == true);
+        allow update: if isAdmin() && isValidComment() && request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if isAdmin() || (isAuthenticated() && resource.data.authorId == request.auth.uid);
+      }
+    }
+
+    match /portfolio/{portfolioId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

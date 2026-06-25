@@ -1,0 +1,213 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the application",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The user's email address"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "admin",
+            "editor",
+            "user"
+          ],
+          "description": "The user's role"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "When the user was created"
+        }
+      },
+      "required": [
+        "email",
+        "role",
+        "createdAt"
+      ]
+    },
+    "ProjectInquiry": {
+      "title": "Project Inquiry",
+      "description": "A project inquiry submitted via the contact form",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the person submitting the inquiry"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Email of the person submitting the inquiry"
+        },
+        "company": {
+          "type": "string",
+          "description": "Company name"
+        },
+        "projectType": {
+          "type": "string",
+          "description": "Type of project"
+        },
+        "budget": {
+          "type": "string",
+          "description": "Estimated budget"
+        },
+        "message": {
+          "type": "string",
+          "description": "Project details"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["new", "read", "archived"],
+          "description": "Status of the inquiry"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "When the inquiry was submitted"
+        }
+      },
+      "required": [
+        "name",
+        "email",
+        "message",
+        "status",
+        "createdAt"
+      ]
+    },
+    "Blog": {
+      "title": "Blog",
+      "description": "A blog post",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "The title of the blog post"
+        },
+        "slug": {
+          "type": "string",
+          "description": "The URL-friendly slug for the blog post"
+        },
+        "content": {
+          "type": "string",
+          "description": "The markdown content of the blog post"
+        },
+        "excerpt": {
+          "type": "string",
+          "description": "A short summary of the blog post"
+        },
+        "keywords": {
+          "type": "string",
+          "description": "Comma-separated SEO keywords"
+        },
+        "category": {
+          "type": "string",
+          "description": "The category of the blog post"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "published"
+          ],
+          "description": "The publication status"
+        },
+        "authorUid": {
+          "type": "string",
+          "description": "The UID of the user who created the post"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "When the post was created"
+        },
+        "updatedAt": {
+          "type": "timestamp",
+          "description": "When the post was last updated"
+        }
+      },
+      "required": [
+        "title",
+        "slug",
+        "content",
+        "status",
+        "authorUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "NewsletterSubscriber": {
+      "title": "Newsletter Subscriber",
+      "description": "A user subscribed to the newsletter",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Email of the subscriber"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "When the user subscribed"
+        }
+      },
+      "required": [
+        "email",
+        "createdAt"
+      ]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "Application settings",
+      "type": "object",
+      "properties": {
+        "metaTitle": {
+          "type": "string",
+          "description": "SEO meta title"
+        },
+        "metaDescription": {
+          "type": "string",
+          "description": "SEO meta description"
+        },
+        "keywords": {
+          "type": "string",
+          "description": "SEO keywords"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "Stores user profiles and roles"
+    },
+    "/project_inquiries/{inquiryId}": {
+      "schema": {
+        "$ref": "#/entities/ProjectInquiry"
+      },
+      "description": "Stores project inquiries from the contact form"
+    },
+    "/blogs/{blogId}": {
+      "schema": {
+        "$ref": "#/entities/Blog"
+      },
+      "description": "Stores blog posts"
+    },
+    "/settings/{settingId}": {
+      "schema": {
+        "$ref": "#/entities/Setting"
+      },
+      "description": "Stores application settings"
+    },
+    "/newsletter_subscribers/{subscriberId}": {
+      "schema": {
+        "$ref": "#/entities/NewsletterSubscriber"
+      },
+      "description": "Stores newsletter subscriptions"
+    }
+  }
+}
